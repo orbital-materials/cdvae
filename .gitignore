@@ -1,4 +1,6 @@
 
+hydra/
+wandb/
 # .gitignore defaults for python and pycharm
 .idea
 .editorconfig
