@@ -4,7 +4,7 @@ due to https://github.com/Lightning-AI/metrics/pull/914 .
 Change the 'default' in `conf/default.yml` in order to run individual bits of the pipeline,
 
 
-Put this in a .env file, make sure that the wandb exists!
+Put this in a .env file, make sure that the wandb directory exists!
 ```
 export PROJECT_ROOT="/Users/markn/code/cdvae"
 export HYDRA_JOBS="/Users/markn/code/cdvae/hydra"
@@ -18,14 +18,12 @@ this is set by default to false for some reason. In the mini config I have set i
 
 ### Evaluation
 
-
-
 Running the generation task worked fine.
 
 Trying to run the reconstruction task gave me this error:
 
 ```
-(cdvae) markn@MacBook-Pro cdvae % PYTHONPATH=. python scripts/evaluate.py --model_path /Users/markn/code/cdvae/hydra/singlerun/2022-09-14/test_mini/ --tasks recon gen opt
+(cdvae) markn@MacBook-Pro cdvae % PYTHONPATH=. python scripts/evaluate.py --model_path /Users/markn/code/cdvae/hydra/singlerun/2022-09-14/test_mini/ --tasks recon gen opt --batch_size 10 --num_batches_to_samples 2
 
 Evaluate model on the reconstruction task.
 batch 0 in 13
@@ -48,4 +46,9 @@ Traceback (most recent call last):
     if decrement and (incs.dim() > 1 or int(incs[idx]) != 0):
 AttributeError: 'NoneType' object has no attribute 'dim'
 
+```
+
+To fix it, I upgraded pytorch-geometric (not specified as a dependency, I think it is installed by ase)
+```
+pip install torch-geometric==2.0.4
 ```
