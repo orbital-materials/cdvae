@@ -707,6 +707,7 @@ def preprocess_arrow(input_file, num_workers, niggli, primitive, graph_method,
             'mp_id': row['key'],
             'cif': crystal_str,
             'graph_arrays': graph_arrays,
+            'energy_per_atom': atoms.info['energy'] / len(atoms)
         }
         result_dict.update(properties)
         return result_dict
@@ -721,7 +722,7 @@ def preprocess_arrow(input_file, num_workers, niggli, primitive, graph_method,
         num_cpus=num_workers)
 
     mpid_to_results = {result['mp_id']: result for result in unordered_results}
-    ordered_results = [mpid_to_results[df.iloc[idx]['material_id']]
+    ordered_results = [mpid_to_results[df.iloc[idx]['key']]
                        for idx in range(len(df))]
 
     return ordered_results
