@@ -1,15 +1,18 @@
+from typing import Callable
+
 import hydra
 import omegaconf
 import torch
 import pandas as pd
 from omegaconf import ValueNode
 from torch.utils.data import Dataset
+import pyarrow as pa
 
 from torch_geometric.data import Data
 
 from cdvae.common.utils import PROJECT_ROOT
 from cdvae.common.data_utils import (
-    preprocess, preprocess_tensors, add_scaled_lattice_prop)
+    preprocess, preprocess_tensors, add_scaled_lattice_prop, preprocess_arrow)
 
 
 class CrystDataset(Dataset):
@@ -21,14 +24,14 @@ class CrystDataset(Dataset):
         super().__init__()
         self.path = path
         self.name = name
-        self.df = pd.read_csv(path)
+        self.df = self.load_path(path)
         self.prop = prop
         self.niggli = niggli
         self.primitive = primitive
         self.graph_method = graph_method
         self.lattice_scale_method = lattice_scale_method
 
-        self.cached_data = preprocess(
+        self.cached_data = self.preprocess(
             self.path,
             preprocess_workers,
             niggli=self.niggli,
@@ -71,6 +74,21 @@ class CrystDataset(Dataset):
 
     def __repr__(self) -> str:
         return f"CrystDataset({self.name=}, {self.path=})"
+
+    def load_path(self, path):
+        return pd.read_csv(path)
+
+    def preprocess(self, *args, **kwargs):
+        return preprocess(*args, **kwargs)
+
+
+class ArrowCrystDataset(CrystDataset):
+    def load_path(self, path):
+        table = pa.RecordBatchFileReader(pa.OSFile('/Users/james/Downloads/ocp-2020', 'rb')).read_all()
+        return table
+
+    def preprocess(self, *args, **kwargs):
+        return preprocess_arrow(*args, **kwargs)
 
 
 class TensorCrystDataset(Dataset):

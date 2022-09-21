@@ -5,22 +5,27 @@ import torch
 import copy
 import itertools
 
+from ase import Atoms
 from pymatgen.core.structure import Structure
 from pymatgen.core.lattice import Lattice
 from pymatgen.analysis.graphs import StructureGraph
 from pymatgen.analysis import local_env
 
 from networkx.algorithms.components import is_connected
+from pymatgen.io.ase import AseAtomsAdaptor
 
 from sklearn.metrics import accuracy_score, recall_score, precision_score
 
 from torch_scatter import scatter
 
 from p_tqdm import p_umap
+import pyarrow as pa
 
 
 # Tensor of unit cells. Assumes 27 cells in -1, 0, 1 offsets in the x and y dimensions
 # Note that differing from OCP, we have 27 offsets here because we are in 3D
+from common.parse import atoms_json_loads
+
 OFFSET_LIST = [
     [-1, -1, -1],
     [-1, -1, 0],
@@ -87,7 +92,11 @@ CrystalNN = local_env.CrystalNN(
 def build_crystal(crystal_str, niggli=True, primitive=False):
     """Build crystal from cif string."""
     crystal = Structure.from_str(crystal_str, fmt='cif')
+    return get_crystal_from_structure(crystal, niggli, primitive)
 
+
+def get_crystal_from_structure(crystal, niggli=True, primitive=False):
+    """Build crystal from cif string."""
     if primitive:
         crystal = crystal.get_primitive_structure()
 
@@ -676,6 +685,44 @@ def preprocess(input_file, num_workers, niggli, primitive, graph_method,
 
     mpid_to_results = {result['mp_id']: result for result in unordered_results}
     ordered_results = [mpid_to_results[df.iloc[idx]['material_id']]
+                       for idx in range(len(df))]
+
+    return ordered_results
+
+
+def preprocess_arrow(input_file, num_workers, niggli, primitive, graph_method,
+               prop_list):
+    table = pa.RecordBatchFileReader(pa.OSFile(input_file, 'rb')).read_all()
+    df = table.to_pandas()
+
+    def process_one(row, niggli, primitive, graph_method, prop_list):
+        crystal_str = row['atoms_json']
+        atoms = Atoms.fromdict(atoms_json_loads(crystal_str))
+        structure = AseAtomsAdaptor.get_structure(atoms)
+        crystal = get_crystal_from_structure(
+            structure, niggli=niggli, primitive=primitive)
+        graph_arrays = build_crystal_graph(crystal, graph_method)
+        properties = {k: row[k] for k in prop_list if k in row.keys()}
+        result_dict = {
+            'mp_id': row['key'],
+            'cif': crystal_str,
+            'graph_arrays': graph_arrays,
+            'energy_per_atom': atoms.info['energy'] / len(atoms)
+        }
+        result_dict.update(properties)
+        return result_dict
+
+    unordered_results = p_umap(
+        process_one,
+        [df.iloc[idx] for idx in range(len(df))],
+        [niggli] * len(df),
+        [primitive] * len(df),
+        [graph_method] * len(df),
+        [prop_list] * len(df),
+        num_cpus=num_workers)
+
+    mpid_to_results = {result['mp_id']: result for result in unordered_results}
+    ordered_results = [mpid_to_results[df.iloc[idx]['key']]
                        for idx in range(len(df))]
 
     return ordered_results
